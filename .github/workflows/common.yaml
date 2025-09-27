@@ -2,32 +2,74 @@ name: common-ci-cd
 on: 
   workflow_call: 
      inputs: 
-         project: 
-             required: true 
-             type: string 
-         component: 
-             required: true 
-             type: string 
-         app_type: 
-             required: true 
-             type: string 
-jobs:                      
-   ci: 
-     runs-on: self-hosted 
-     outputs: 
-        appversion: ${{ steps.package-version.outputs.version }}
+       project: 
+         required: true 
+         type: string 
+       component: 
+         required: true 
+         type: string 
+       app_type: 
+         required: true 
+         type: string 
+     secrets: 
+       AWS_ACCESS_KEY_ID: 
+          required: true 
+       AWS_SECRET_ACCESS_KEY: 
+          required: true 
+jobs: 
+  ci: 
+   runs-on: self-hosted 
+   outputs: 
+      appVersion: ${{ steps.package-version.outputs.version }} 
+      steps: 
+      - name: checkout the code 
+        uses: actions/checkout@v5 
+      - name: chack the files 
+        run: ls -l 
+      - name: print inputs 
+        run: echo :print is ${{ inputs.project }} 
+      - name: Get App version 
+        id: package-version 
+        run: echo "version=${{ jq -r '.version' package.json }}" >> "$GITHUB_OUTPUT"  
+      - name: print app version 
+        run: ${{ steps.package-version.outputs.version }} 
+      - name: install dependencies 
+        run: npm install 
+      - name: docker build 
+        run: docker build -t 888947293288.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${{ steps.package-version.outputs.version }} . 
+      - name: Confiure AWS Credentials 
+        uses: aws-actions/configure-aws-credentials@v5.0.0 
+        with: 
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }} 
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }} 
+          aws-region: us-east-1 
+      - name: push the image to ECR 
+        run: 
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 888947293288.dkr.ecr.us-east-1.amazonaws.com
+          docker push 888947293288.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${{ steps.package-version.outputs.version }} 
+
+  cd: 
+   runs-on: self-hosted 
+   need: ci 
+   env: 
+     appVersion: ${{ needs.ci.outputs.appVersion }} 
      steps: 
-     - name: checkout the code 
+     - name: checkout deploy code 
        uses: actions/checkout@v5 
+       with: 
+         repository: subbu20n/catalogue-deploy 
      - name: check the files 
        run: ls -l 
-     - name: print inputs 
-       run: echo "print is ${{ inputs.project }}" 
-     - name: Get app version 
-       id: package-version 
-       run: echo "version= ${{ jq -r '.version' package.json }}" >>"$GITHUB_OUTPUT" 
-     - name: print app version 
-       run: echo ${{ steps.package-version.outputs.version }} 
-     - name: install dependencies 
-       run: npm install 
-            
+     - name: Configure AWS credentials 
+       uses: aws-actions/configure-aws-credentials@v5.0.0 
+       with: 
+         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }} 
+         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }} 
+         aws-region: us-east-1 
+     - name: Authenticate to EKS 
+       run: 
+         aws eks pdate-kubeconfig --region us-east-1 --name roboshop-dev 
+         kubectl get nodes 
+     - name: deploy to Eks 
+       run: 
+         helm upgrade --install ${{ inputs.component }} -f values-dev.yaml --set deployment.imageVersion = "appVersion" .                                                      
