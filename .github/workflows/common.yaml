@@ -1,0 +1,23 @@
+name: common-ci-cd 
+on: 
+  workflow_call: 
+     inputs: 
+         project: 
+             required: true 
+             type: string 
+         component: 
+             required: true 
+             type: string 
+         app_type: 
+             required: true 
+             type: string 
+jobs:                      
+   ci: 
+     runs-on: self-hosted 
+     steps: 
+     - name: checkout the code 
+       uses: actions/checkout@v5 
+     - name: check the files 
+       run: ls -l 
+     - name: print inputs 
+       run: echo "print is ${{ inputs.project }}"     
