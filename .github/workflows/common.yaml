@@ -14,10 +14,20 @@ on:
 jobs:                      
    ci: 
      runs-on: self-hosted 
+     outputs: 
+        appversion: ${{ steps.package-version.outputs.version }}
      steps: 
      - name: checkout the code 
        uses: actions/checkout@v5 
      - name: check the files 
        run: ls -l 
      - name: print inputs 
-       run: echo "print is ${{ inputs.project }}"     
+       run: echo "print is ${{ inputs.project }}" 
+     - name: Get app version 
+       id: package-version 
+       run: echo "version= ${{ jq -r '.version' package.json }}" >>"$GITHUB_OUTPUT" 
+     - name: print app version 
+       run: echo ${{ steps.package-version.outputs.version }} 
+     - name: install dependencies 
+       run: npm install 
+            
